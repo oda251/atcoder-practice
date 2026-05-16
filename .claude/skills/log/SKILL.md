@@ -23,7 +23,7 @@ allowed-tools: Bash(sqlite3 *)
 引数をパースし、Bash ツールで以下を実行する。値は SQL リテラルとして安全にエスケープすること（シングルクオートは `''` で重ね、NULL の場合はクオート無し）。
 
 ```bash
-sqlite3 data/practice.db <<'SQL'
+sqlite3 "${CLAUDE_SKILL_DIR}/../../../data/practice.db" <<'SQL'
 INSERT INTO attempts (technique, kind, problem_uri, correct, asked_at, note)
 VALUES ('<TECH>', '<KIND>', <URI_OR_NULL>, <0|1>, datetime('now'), <NOTE_OR_NULL>);
 SELECT 'recorded #' || last_insert_rowid() || ' ' || datetime('now');

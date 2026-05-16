@@ -69,16 +69,19 @@ def main() -> int:
 
     kinds = (args.kind,) if args.kind else KINDS
 
+    # Fetch all attempts once and group; avoids N+1 across techniques × kinds.
+    attempts: dict[tuple[str, str], list[sqlite3.Row]] = {}
+    for r in conn.execute(
+        "SELECT technique, kind, correct, asked_at FROM attempts "
+        "ORDER BY technique, kind, asked_at DESC"
+    ):
+        attempts.setdefault((r["technique"], r["kind"]), []).append(r)
+
     now = dt.datetime.now(dt.timezone.utc)
     unseen, due, fresh = [], [], []
     for t in techniques:
         for kind in kinds:
-            rows = conn.execute(
-                "SELECT correct, asked_at FROM attempts "
-                "WHERE technique = ? AND kind = ? "
-                "ORDER BY asked_at DESC",
-                (t["name"], kind),
-            ).fetchall()
+            rows = attempts.get((t["name"], kind), [])
             entry = {
                 "technique": t["name"],
                 "variation_of": t["variation_of"],
@@ -89,19 +92,17 @@ def main() -> int:
                 unseen.append(entry)
                 continue
             reps = streak([(r["correct"], r["asked_at"]) for r in rows])
+            # SQLite `datetime('now')` returns naive UTC; tag as UTC for compare.
             last_at = dt.datetime.fromisoformat(rows[0]["asked_at"].replace(" ", "T"))
             if last_at.tzinfo is None:
                 last_at = last_at.replace(tzinfo=dt.timezone.utc)
-            interval = dt.timedelta(days=2 ** min(reps, 7))
-            if last_at + interval < now:
+            entry["reps"] = reps
+            entry["last_at"] = rows[0]["asked_at"]
+            if last_at + dt.timedelta(days=2 ** min(reps, 7)) < now:
                 entry["bucket"] = "due"
-                entry["reps"] = reps
-                entry["last_at"] = rows[0]["asked_at"]
                 due.append(entry)
             else:
                 entry["bucket"] = "fresh"
-                entry["reps"] = reps
-                entry["last_at"] = rows[0]["asked_at"]
                 fresh.append(entry)
 
     bucket = unseen or due or fresh

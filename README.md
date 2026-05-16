@@ -76,34 +76,11 @@ python3 scripts/init_db.py
 
 ## SQLite スキーマ
 
-```sql
-CREATE TABLE techniques (
-  name         TEXT PRIMARY KEY,
-  variation_of TEXT REFERENCES techniques(name)
-);
+スキーマと seed の一次ソースは `scripts/init_db.py`。概略は:
 
-CREATE TABLE attempts (
-  id          INTEGER PRIMARY KEY,
-  technique   TEXT NOT NULL REFERENCES techniques(name),
-  kind        TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
-  problem_uri TEXT,
-  correct     INTEGER NOT NULL CHECK (correct IN (0,1)),
-  asked_at    TEXT NOT NULL,
-  note        TEXT
-);
-
-CREATE VIEW stats AS
-SELECT t.name         AS technique,
-       t.variation_of AS variation_of,
-       a.kind         AS kind,
-       COUNT(*)       AS n,
-       SUM(a.correct) AS ok,
-       ROUND(AVG(a.correct) * 100.0, 1) AS acc,
-       MAX(a.asked_at) AS last_at
-FROM techniques t
-JOIN attempts a ON a.technique = t.name
-GROUP BY t.name, a.kind;
-```
+- `techniques(name PK, variation_of FK→techniques.name)` — 技法カタログ
+- `attempts(id, technique FK, kind, problem_uri, correct, asked_at, note)` — 練習履歴
+- `stats` ビュー — `(technique, variation_of, kind)` ごとの `n / ok / acc / last_at`
 
 ## SRS
 

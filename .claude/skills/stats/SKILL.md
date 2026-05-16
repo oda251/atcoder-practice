@@ -8,7 +8,7 @@ allowed-tools: Bash(sqlite3 *)
 ## 現在のサマリ（kind 別）
 
 ```!
-sqlite3 -box data/practice.db "SELECT kind, COUNT(*) AS n, SUM(correct) AS ok, ROUND(AVG(correct)*100, 1) AS acc, MAX(asked_at) AS last_at FROM attempts GROUP BY kind ORDER BY kind;"
+sqlite3 -box "${CLAUDE_SKILL_DIR}/../../../data/practice.db" "SELECT kind, SUM(n) AS n, SUM(ok) AS ok, ROUND(100.0 * SUM(ok) / SUM(n), 1) AS acc, MAX(last_at) AS last_at FROM stats GROUP BY kind ORDER BY kind;"
 ```
 
 ## ユーザ入力
@@ -17,20 +17,21 @@ sqlite3 -box data/practice.db "SELECT kind, COUNT(*) AS n, SUM(correct) AS ok, R
 
 ## 詳細
 
-引数があれば、`stats` ビューから該当行を抽出する。Bash ツールで以下のような SELECT を実行する（WHERE 句を引数に応じて構築）。
+引数があれば `stats` ビューから該当行を抽出する。Bash で sqlite3 を叩く。DB パスは `${CLAUDE_SKILL_DIR}/../../../data/practice.db` を使う（または相対 `data/practice.db` でもリポジトリルートなら可）。
+
+`stats` ビューの列: `technique, variation_of, kind, n, ok, acc, last_at`。
+
+引数の組み立て例:
+
+- `--tech "<name>"` → `WHERE technique = '<name>'`
+- `--variation-of "<parent>"` → `WHERE variation_of = '<parent>'`
+- `--kind <kind>` → `WHERE kind = '<kind>'`
+
+例:
 
 ```bash
-# --tech <技法名>: 特定 technique
-sqlite3 -box data/practice.db "SELECT technique, variation_of, kind, n, ok, acc, last_at FROM stats WHERE technique = '累積和' ORDER BY kind;"
-
-# --variation-of <親>: 親の子（バリエーション）すべて
-sqlite3 -box data/practice.db "SELECT technique, kind, n, ok, acc, last_at FROM stats WHERE variation_of = 'bitDP' ORDER BY technique, kind;"
-
-# --kind impl: kind で絞る（正答率の低い順）
-sqlite3 -box data/practice.db "SELECT technique, variation_of, n, ok, acc, last_at FROM stats WHERE kind = 'impl' ORDER BY acc, last_at;"
-
-# 引数なし詳細: 着手済みのみ全部
-sqlite3 -box data/practice.db "SELECT technique, variation_of, kind, n, ok, acc, last_at FROM stats ORDER BY technique, kind;"
+sqlite3 -box "${CLAUDE_SKILL_DIR}/../../../data/practice.db" \
+  "SELECT * FROM stats WHERE technique = '累積和' ORDER BY kind;"
 ```
 
 ## 出力方針
@@ -38,6 +39,6 @@ sqlite3 -box data/practice.db "SELECT technique, variation_of, kind, n, ok, acc,
 - まず kind 別サマリを見せる
 - 引数で絞り込みがあれば、その範囲の明細を続けて表示
 - 全体把握として「着手済 N pair / 全 M pair」を 1 行添えると良い
-  - 全体 = `SELECT COUNT(*) * 3 FROM techniques`（kind 3 種類分）
+  - 全体 = `SELECT COUNT(*) * 3 FROM techniques`
   - 着手済 = `SELECT COUNT(DISTINCT technique || ':' || kind) FROM attempts`
-- 未着手は `stats` ビューには出ない（INNER JOIN なので）。未着手を含む全 pair が必要なら別途 CROSS JOIN で出す
+- 未着手は `stats` ビューには出ない（INNER JOIN なので）
