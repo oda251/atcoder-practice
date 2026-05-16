@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Pick the next (technique, kind) to practice.
 
-Priority:
-  1. Never-attempted (technique, kind) pairs.
-  2. SRS-due pairs (derived from attempts).
-  3. Everything else.
-Ties are broken randomly.
-
-SRS rule (derived, no state table):
-  Count `reps` = current streak of consecutive correct attempts (newest first).
+Priority: unseen > SRS-due > fresh. Tie-break: random.
+SRS rule (derived from attempts, no state table):
+  reps = consecutive correct attempts from the newest backwards.
   interval_days = 2 ** min(reps, 7)
   Due if last_at + interval_days < now.
 """
@@ -17,16 +12,17 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import random
+import re
 import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "practice.db"
+DEFAULT_DB = Path(__file__).resolve().parents[3] / "data" / "practice.db"
 KINDS = ("card", "impl", "advanced")
+STAR_RE = re.compile(r"★(\d+)")
 
 
 def streak(rows: list[tuple[int, str]]) -> int:
-    """Count current correct streak (rows are newest-first)."""
     n = 0
     for correct, _ in rows:
         if correct:
@@ -36,18 +32,29 @@ def streak(rows: list[tuple[int, str]]) -> int:
     return n
 
 
+def extract_stars(name: str) -> int:
+    m = STAR_RE.search(name)
+    return int(m.group(1)) if m else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tech", help="restrict to a single technique id")
     parser.add_argument("--kind", choices=KINDS, help="restrict to a single kind")
-    parser.add_argument("--db", default=str(DB_PATH))
-    parser.add_argument("--seed", type=int, help="random seed for reproducibility")
+    parser.add_argument("--db", default=str(DEFAULT_DB))
+    parser.add_argument("--seed", type=int, help="random seed (testing)")
     args = parser.parse_args()
 
     if args.seed is not None:
         random.seed(args.seed)
 
-    conn = sqlite3.connect(args.db)
+    db = Path(args.db)
+    if not db.exists():
+        print(f"database not found: {db}", file=sys.stderr)
+        print("hint: run `python3 scripts/init_db.py` first.", file=sys.stderr)
+        return 1
+
+    conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
 
     where_t = "WHERE id = ?" if args.tech else ""
@@ -62,10 +69,7 @@ def main() -> int:
     kinds = (args.kind,) if args.kind else KINDS
 
     now = dt.datetime.now(dt.timezone.utc)
-    unseen: list[tuple[str, str, str]] = []
-    due: list[tuple[str, str, str]] = []
-    other: list[tuple[str, str, str]] = []
-
+    unseen, due, fresh = [], [], []
     for t in techniques:
         for kind in kinds:
             rows = conn.execute(
@@ -74,28 +78,44 @@ def main() -> int:
                 "ORDER BY asked_at DESC",
                 (t["id"], kind),
             ).fetchall()
-            entry = (t["id"], t["name"], kind)
+            entry = {
+                "technique_id": t["id"],
+                "name": t["name"],
+                "stars": extract_stars(t["name"]),
+                "kind": kind,
+            }
             if not rows:
+                entry["bucket"] = "unseen"
                 unseen.append(entry)
                 continue
             reps = streak([(r["correct"], r["asked_at"]) for r in rows])
             last_at = dt.datetime.fromisoformat(rows[0]["asked_at"])
             interval = dt.timedelta(days=2 ** min(reps, 7))
             if last_at + interval < now:
+                entry["bucket"] = "due"
+                entry["reps"] = reps
+                entry["last_at"] = rows[0]["asked_at"]
                 due.append(entry)
             else:
-                other.append(entry)
+                entry["bucket"] = "fresh"
+                entry["reps"] = reps
+                entry["last_at"] = rows[0]["asked_at"]
+                fresh.append(entry)
 
-    bucket = unseen or due or other
+    bucket = unseen or due or fresh
     if not bucket:
-        print("nothing to ask", file=sys.stderr)
+        print("nothing to pick", file=sys.stderr)
         return 1
 
-    tech_id, name, kind = random.choice(bucket)
-    bucket_label = (
-        "unseen" if bucket is unseen else "due" if bucket is due else "fresh"
-    )
-    print(f"{tech_id}\t{kind}\t{name}\t[{bucket_label}]")
+    pick = random.choice(bucket)
+    print(f"technique_id: {pick['technique_id']}")
+    print(f"name:         {pick['name']}")
+    print(f"stars:        ★{pick['stars']}" if pick["stars"] else "stars:        (n/a)")
+    print(f"kind:         {pick['kind']}")
+    print(f"bucket:       {pick['bucket']}")
+    if "last_at" in pick:
+        print(f"last_at:      {pick['last_at']}")
+        print(f"reps:         {pick['reps']}")
     return 0
 
 
