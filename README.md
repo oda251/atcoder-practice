@@ -8,9 +8,11 @@ Claude Code から `/ask` `/log` `/stats` の project skill で操作する前�
 
 | kind | 内容 |
 |---|---|
-| `card` | フラッシュカード（知識想起 Q&A）。Claude が都度生成 |
-| `impl` | 基礎実装。典型90 本問またはその類題を Claude が都度提示 |
-| `advanced` | 応用。AtCoder/yukicoder の本問（URI を `--uri` で記録） |
+| `card` | 解答方針カード。該当技法を使う小問題を Claude がその場で生成し、ユーザは方針だけを答える（コード不要） |
+| `impl` | 基礎実装。典型90 の本問そのものを解く |
+| `advanced` | 応用。典型90 以外の AtCoder 本問（同じ技法）を解く。URI を `--uri` で記録 |
+
+難易度は kind そのものに対応する（`card < impl < advanced`）。`techniques.name` は技法名（例: `累積和`, `二分探索`）で、典型90 のスター難易度や本問タイトルは保持しない。
 
 問題自体はマスタを持たない。Claude が会話で出題し、結果のみ DB に記録する。
 
@@ -57,16 +59,16 @@ python3 scripts/init_db.py
 
 `/ask` は SRS で次の `(technique, kind)` を選び、Claude が `kind` に応じて以下を行う:
 
-- `card`: 解法の知識を問うフラッシュカードを生成 → ユーザ回答を採点
-- `impl`: 典型90 本問または易しい類題を提示 → コードレビュー
-- `advanced`: 同等以上の難易度の AtCoder 本問を提案 → URI で記録
+- `card`: 該当技法の小問題を生成し、ユーザに方針（技法名 + アイデア 1-3 行）を答えてもらう
+- `impl`: 典型90 本問そのものを提示 → コードレビュー
+- `advanced`: 典型90 以外で同じ技法を使う AtCoder 本問を提案 → URI 記録
 
 ## SQLite スキーマ
 
 ```sql
 CREATE TABLE techniques (
   id   TEXT PRIMARY KEY,    -- 'typical90-NNN'
-  name TEXT NOT NULL        -- 例: 'Yokan Party（★4）'
+  name TEXT NOT NULL        -- 技法名 例: '累積和', '二分探索'
 );
 
 CREATE TABLE attempts (

@@ -12,14 +12,12 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import random
-import re
 import sqlite3
 import sys
 from pathlib import Path
 
 DEFAULT_DB = Path(__file__).resolve().parents[3] / "data" / "practice.db"
 KINDS = ("card", "impl", "advanced")
-STAR_RE = re.compile(r"★(\d+)")
 
 
 def streak(rows: list[tuple[int, str]]) -> int:
@@ -30,11 +28,6 @@ def streak(rows: list[tuple[int, str]]) -> int:
         else:
             break
     return n
-
-
-def extract_stars(name: str) -> int:
-    m = STAR_RE.search(name)
-    return int(m.group(1)) if m else 0
 
 
 def main() -> int:
@@ -81,7 +74,6 @@ def main() -> int:
             entry = {
                 "technique_id": t["id"],
                 "name": t["name"],
-                "stars": extract_stars(t["name"]),
                 "kind": kind,
             }
             if not rows:
@@ -89,7 +81,9 @@ def main() -> int:
                 unseen.append(entry)
                 continue
             reps = streak([(r["correct"], r["asked_at"]) for r in rows])
-            last_at = dt.datetime.fromisoformat(rows[0]["asked_at"])
+            last_at = dt.datetime.fromisoformat(rows[0]["asked_at"].replace(" ", "T"))
+            if last_at.tzinfo is None:
+                last_at = last_at.replace(tzinfo=dt.timezone.utc)
             interval = dt.timedelta(days=2 ** min(reps, 7))
             if last_at + interval < now:
                 entry["bucket"] = "due"
@@ -110,7 +104,6 @@ def main() -> int:
     pick = random.choice(bucket)
     print(f"technique_id: {pick['technique_id']}")
     print(f"name:         {pick['name']}")
-    print(f"stars:        ★{pick['stars']}" if pick["stars"] else "stars:        (n/a)")
     print(f"kind:         {pick['kind']}")
     print(f"bucket:       {pick['bucket']}")
     if "last_at" in pick:
