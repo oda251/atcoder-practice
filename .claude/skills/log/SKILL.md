@@ -11,7 +11,7 @@ allowed-tools: Bash(sqlite3 *)
 
 形式: `<technique_id> <kind> <o|x> [--uri <URI>] [--note "<text>"]`
 
-- `technique_id`: 例 `typical90-005`
+- `technique_id`: 例 `ds-prefix-sum`, `graph-dijkstra`, `dp-bit-grouping`
 - `kind`: `card` / `impl` / `advanced`
 - `o` = 正解（correct=1）/ `x` = 不正解（correct=0）
 - `--uri`: 任意。問題URL（`advanced` で推奨、AtCoder/yukicoder/file:// 何でも可）
@@ -30,8 +30,8 @@ SQL
 ```
 
 例:
-- `/log typical90-005 card o` → URI/NOTE は NULL
-- `/log typical90-005 advanced x --uri https://atcoder.jp/contests/abc123/tasks/abc123_d --note "桁DPが書けなかった"`
+- `/log ds-prefix-sum card o` → URI/NOTE は NULL
+- `/log graph-dijkstra advanced x --uri https://atcoder.jp/contests/abc123/tasks/abc123_d --note "ヒープ更新で TLE"`
 
 ## 事後アクション
 

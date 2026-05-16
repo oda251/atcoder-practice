@@ -1,6 +1,8 @@
 # atcoder-practice
 
-典型解法の習得を目的とした AtCoder 練習ログ。典型90 の各解法について、3 種類の練習（`card` / `impl` / `advanced`）の出題数と正答率を SQLite に蓄積する。
+競プロ典型解法の習得を目的とした AtCoder 練習ログ。**技法カタログ（category → technique の 2 段階層）** を独立して持ち、各 technique について 3 種類の練習（`card` / `impl` / `advanced`）の出題数と正答率を SQLite に蓄積する。
+
+典型90 はあくまで例題プールとして参照（マスタには持たない）。
 
 Claude Code から `/ask` `/log` `/stats` の project skill で操作する前提。
 
@@ -8,13 +10,30 @@ Claude Code から `/ask` `/log` `/stats` の project skill で操作する前�
 
 | kind | 内容 |
 |---|---|
-| `card` | 解答方針カード。該当技法を使う小問題を Claude がその場で生成し、ユーザは方針だけを答える（コード不要） |
-| `impl` | 基礎実装。典型90 の本問そのものを解く |
-| `advanced` | 応用。典型90 以外の AtCoder 本問（同じ技法）を解く。URI を `--uri` で記録 |
+| `card` | 解答方針カード。該当技法を使う小問題を Claude が生成し、ユーザは方針だけを答える（コード不要） |
+| `impl` | 基礎実装。Claude が生成する問題、または該当 technique を扱う典型90 本問でコードを書く |
+| `advanced` | 応用。Claude が生成する発展問題、または AtCoder/yukicoder の良問。URI を `--uri` で記録 |
 
-難易度は kind そのものに対応する（`card < impl < advanced`）。`techniques.name` は技法名（例: `累積和`, `二分探索`）で、典型90 のスター難易度や本問タイトルは保持しない。
+難易度は kind そのものに対応する（`card < impl < advanced`）。
 
 問題自体はマスタを持たない。Claude が会話で出題し、結果のみ DB に記録する。
+
+## カテゴリ
+
+| slug | 内容 |
+|---|---|
+| `dp` | 動的計画法 |
+| `graph` | グラフ |
+| `string` | 文字列 |
+| `number-theory` | 数論 |
+| `geometry` | 幾何 |
+| `data-structure` | データ構造 |
+| `brute-force` | 全探索 |
+| `search` | 探索（二分探索・尺取り・ダブリング等） |
+| `construction` | 構築・貪欲・パリティ・ゲーム |
+| `math` | 数え上げ・期待値・包除 |
+
+合計 155 technique。`scripts/init_db.py` の `TECHNIQUES` が一次ソース。
 
 ## ファイル構成
 
@@ -27,7 +46,7 @@ atcoder-practice/
 │   ├── log/SKILL.md       # 結果記録
 │   └── stats/SKILL.md     # 集計表示
 ├── data/practice.db       # SQLite (git ignore)
-├── scripts/init_db.py     # 初期セットアップ
+├── scripts/init_db.py     # スキーマ作成 + 技法カタログ seed
 └── README.md
 ```
 
@@ -37,38 +56,32 @@ atcoder-practice/
 python3 scripts/init_db.py
 ```
 
-`data/practice.db` を作成し、`techniques` に typical90 を 90 件投入する。再作成したい場合は `--force`。
+`data/practice.db` を作成し、技法カタログを投入。再作成は `--force`（既存 attempts も消えるので注意）。
 
 ## 使い方（Claude Code）
-
-このリポジトリのルートで `claude` を起動すると、project skill が自動で読み込まれる。
 
 ```text
 /ask
 /ask --kind card
-/ask --tech typical90-005
+/ask --category dp
+/ask --tech ds-prefix-sum
 
-/log typical90-005 card o
-/log typical90-005 impl x --note "全探索で TLE"
-/log typical90-005 advanced o --uri https://atcoder.jp/contests/...
+/log ds-prefix-sum card o
+/log graph-dijkstra impl x --note "復元で詰まった"
+/log dp-bit-grouping advanced o --uri https://atcoder.jp/contests/abc...
 
 /stats
-/stats --tech typical90-005
+/stats --tech ds-prefix-sum
 /stats --kind impl
 ```
-
-`/ask` は SRS で次の `(technique, kind)` を選び、Claude が `kind` に応じて以下を行う:
-
-- `card`: 該当技法の小問題を生成し、ユーザに方針（技法名 + アイデア 1-3 行）を答えてもらう
-- `impl`: 典型90 本問そのものを提示 → コードレビュー
-- `advanced`: 典型90 以外で同じ技法を使う AtCoder 本問を提案 → URI 記録
 
 ## SQLite スキーマ
 
 ```sql
 CREATE TABLE techniques (
-  id   TEXT PRIMARY KEY,    -- 'typical90-NNN'
-  name TEXT NOT NULL        -- 技法名 例: '累積和', '二分探索'
+  id       TEXT PRIMARY KEY,    -- '<category>-<slug>' 例: 'ds-prefix-sum'
+  name     TEXT NOT NULL,        -- 表示名 例: '累積和'
+  category TEXT NOT NULL         -- カテゴリ slug 例: 'data-structure'
 );
 
 CREATE TABLE attempts (
@@ -77,13 +90,14 @@ CREATE TABLE attempts (
   kind          TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
   problem_uri   TEXT,
   correct       INTEGER NOT NULL CHECK (correct IN (0,1)),
-  asked_at      TEXT NOT NULL,    -- ISO8601 UTC
+  asked_at      TEXT NOT NULL,
   note          TEXT
 );
 
 CREATE VIEW stats AS
 SELECT t.id           AS technique_id,
        t.name         AS name,
+       t.category     AS category,
        a.kind         AS kind,
        COUNT(*)       AS n,
        SUM(a.correct) AS ok,

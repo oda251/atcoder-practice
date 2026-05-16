@@ -34,6 +34,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tech", help="restrict to a single technique id")
     parser.add_argument("--kind", choices=KINDS, help="restrict to a single kind")
+    parser.add_argument("--category", help="restrict to a single category")
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--seed", type=int, help="random seed (testing)")
     args = parser.parse_args()
@@ -50,13 +51,20 @@ def main() -> int:
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
 
-    where_t = "WHERE id = ?" if args.tech else ""
-    params_t: tuple = (args.tech,) if args.tech else ()
+    where, params = [], []
+    if args.tech:
+        where.append("id = ?")
+        params.append(args.tech)
+    if args.category:
+        where.append("category = ?")
+        params.append(args.category)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     techniques = conn.execute(
-        f"SELECT id, name FROM techniques {where_t} ORDER BY id", params_t
+        f"SELECT id, name, category FROM techniques {where_sql} ORDER BY id",
+        params,
     ).fetchall()
     if not techniques:
-        print("no techniques found", file=sys.stderr)
+        print("no techniques match the filter", file=sys.stderr)
         return 1
 
     kinds = (args.kind,) if args.kind else KINDS
@@ -74,6 +82,7 @@ def main() -> int:
             entry = {
                 "technique_id": t["id"],
                 "name": t["name"],
+                "category": t["category"],
                 "kind": kind,
             }
             if not rows:
@@ -104,6 +113,7 @@ def main() -> int:
     pick = random.choice(bucket)
     print(f"technique_id: {pick['technique_id']}")
     print(f"name:         {pick['name']}")
+    print(f"category:     {pick['category']}")
     print(f"kind:         {pick['kind']}")
     print(f"bucket:       {pick['bucket']}")
     if "last_at" in pick:
