@@ -1,0 +1,6 @@
+data/practice.db
+data/practice.db-journal
+data/practice.db-wal
+data/practice.db-shm
+__pycache__/
+*.pyc
