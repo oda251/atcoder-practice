@@ -18,6 +18,7 @@ from pathlib import Path
 
 DEFAULT_DB = Path(__file__).resolve().parents[3] / "data" / "practice.db"
 KINDS = ("card", "impl", "advanced")
+PREREQ = {"card": None, "impl": "card", "advanced": "impl"}
 
 
 def streak(rows: list[tuple[int, str]]) -> int:
@@ -77,10 +78,18 @@ def main() -> int:
     ):
         attempts.setdefault((r["technique"], r["kind"]), []).append(r)
 
+    # Gate kind progression: impl needs prior card, advanced needs prior impl.
+    # Only explicit --kind bypasses the gate (--tech still respects progression).
+    explicit = bool(args.kind)
+
     now = dt.datetime.now(dt.timezone.utc)
     unseen, due, fresh = [], [], []
     for t in techniques:
         for kind in kinds:
+            if not explicit:
+                prereq = PREREQ[kind]
+                if prereq is not None and not attempts.get((t["name"], prereq)):
+                    continue
             rows = attempts.get((t["name"], kind), [])
             entry = {
                 "technique": t["name"],
