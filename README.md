@@ -1,6 +1,6 @@
 # atcoder-practice
 
-競プロ典型解法の習得を目的とした AtCoder 練習ログ。**技法カタログ（category → technique の 2 段階層）** を独立して持ち、各 technique について 3 種類の練習（`card` / `impl` / `advanced`）の出題数と正答率を SQLite に蓄積する。
+競プロ典型解法の習得を目的とした AtCoder 練習ログ。**技法カタログ**（日本語名 + バリエーション関係）を独立して持ち、各 technique について 3 種類の練習（`card` / `impl` / `advanced`）の出題数と正答率を SQLite に蓄積する。
 
 典型90 はあくまで例題プールとして参照（マスタには持たない）。
 
@@ -18,22 +18,18 @@ Claude Code から `/ask` `/log` `/stats` の project skill で操作する前�
 
 問題自体はマスタを持たない。Claude が会話で出題し、結果のみ DB に記録する。
 
-## カテゴリ
+## 技法カタログ
 
-| slug | 内容 |
-|---|---|
-| `dp` | 動的計画法 |
-| `graph` | グラフ |
-| `string` | 文字列 |
-| `number-theory` | 数論 |
-| `geometry` | 幾何 |
-| `data-structure` | データ構造 |
-| `brute-force` | 全探索 |
-| `search` | 探索（二分探索・尺取り・ダブリング等） |
-| `construction` | 構築・貪欲・パリティ・ゲーム |
-| `math` | 数え上げ・期待値・包除 |
+`scripts/init_db.py` の `TECHNIQUES` が一次ソース（158件）。技法名は日本語（カタカナ・漢字・英略語混在可）。`variation_of` 列で「親技法のバリエーション」関係だけ表現する（カテゴリではない）:
 
-合計 155 technique。`scripts/init_db.py` の `TECHNIQUES` が一次ソース。
+- `二分探索` → `答えで二分探索`, `インタラクティブ二分探索`
+- `累積和` → `二次元累積和`
+- `bitDP` → `部分和bitDP`, `集合分割bitDP`, `TSPbitDP`, `Sum over Subsets DP`
+- `BFS` → `01-BFS`, `多点スタートBFS`, `ハイパーグラフBFS`
+- `Union-Find` → `重み付きUnion-Find`
+- ほか多数
+
+109親 / 49子。連鎖は最大 3 段（例: `GCD / LCM` → `拡張ユークリッド互除法` → `中国剰余定理`）。
 
 ## ファイル構成
 
@@ -63,49 +59,50 @@ python3 scripts/init_db.py
 ```text
 /ask
 /ask --kind card
-/ask --category dp
-/ask --tech ds-prefix-sum
+/ask --variation-of 二分探索        # 二分探索系のどれか
+/ask --tech 累積和
 
-/log ds-prefix-sum card o
-/log graph-dijkstra impl x --note "復元で詰まった"
-/log dp-bit-grouping advanced o --uri https://atcoder.jp/contests/abc...
+/log 累積和 card o
+/log ダイクストラ impl x --note "ヒープ更新で TLE"
+/log "GCD / LCM" advanced o --uri https://atcoder.jp/contests/...
 
 /stats
-/stats --tech ds-prefix-sum
+/stats --tech 累積和
+/stats --variation-of bitDP
 /stats --kind impl
 ```
+
+技法名にスペースや `/` などが含まれる場合は引数を quote する（`"GCD / LCM"`, `"ソート + 貪欲"`）。
 
 ## SQLite スキーマ
 
 ```sql
 CREATE TABLE techniques (
-  id       TEXT PRIMARY KEY,    -- '<category>-<slug>' 例: 'ds-prefix-sum'
-  name     TEXT NOT NULL,        -- 表示名 例: '累積和'
-  category TEXT NOT NULL         -- カテゴリ slug 例: 'data-structure'
+  name         TEXT PRIMARY KEY,
+  variation_of TEXT REFERENCES techniques(name)
 );
 
 CREATE TABLE attempts (
-  id            INTEGER PRIMARY KEY,
-  technique_id  TEXT NOT NULL REFERENCES techniques(id),
-  kind          TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
-  problem_uri   TEXT,
-  correct       INTEGER NOT NULL CHECK (correct IN (0,1)),
-  asked_at      TEXT NOT NULL,
-  note          TEXT
+  id          INTEGER PRIMARY KEY,
+  technique   TEXT NOT NULL REFERENCES techniques(name),
+  kind        TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
+  problem_uri TEXT,
+  correct     INTEGER NOT NULL CHECK (correct IN (0,1)),
+  asked_at    TEXT NOT NULL,
+  note        TEXT
 );
 
 CREATE VIEW stats AS
-SELECT t.id           AS technique_id,
-       t.name         AS name,
-       t.category     AS category,
+SELECT t.name         AS technique,
+       t.variation_of AS variation_of,
        a.kind         AS kind,
        COUNT(*)       AS n,
        SUM(a.correct) AS ok,
        ROUND(AVG(a.correct) * 100.0, 1) AS acc,
        MAX(a.asked_at) AS last_at
 FROM techniques t
-JOIN attempts a ON a.technique_id = t.id
-GROUP BY t.id, a.kind;
+JOIN attempts a ON a.technique = t.name
+GROUP BY t.name, a.kind;
 ```
 
 ## SRS

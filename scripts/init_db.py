@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Initialize practice.db: create schema and seed the technique catalog.
+"""Initialize practice.db: schema + technique catalog seed.
 
-The catalog covers typical CP techniques as a self-contained taxonomy
-(category -> technique). Typical 90 problems are *examples* of techniques,
-not the primary entity. Mapping from typical90 problems to techniques is
-documented in TYPICAL90_MAP for Claude's reference (not stored in DB).
+Catalog uses Japanese names as natural keys; variation_of expresses
+the parent technique when this entry is a true variant of another
+(NOT a category grouping).
 """
 from __future__ import annotations
 
@@ -17,314 +16,341 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "practice.db"
 
 SCHEMA = """
 CREATE TABLE techniques (
-  id       TEXT PRIMARY KEY,
-  name     TEXT NOT NULL,
-  category TEXT NOT NULL
+  name         TEXT PRIMARY KEY,
+  variation_of TEXT REFERENCES techniques(name)
 );
 
-CREATE INDEX idx_techniques_category ON techniques(category);
+CREATE INDEX idx_techniques_variation ON techniques(variation_of);
 
 CREATE TABLE attempts (
-  id            INTEGER PRIMARY KEY,
-  technique_id  TEXT NOT NULL REFERENCES techniques(id),
-  kind          TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
-  problem_uri   TEXT,
-  correct       INTEGER NOT NULL CHECK (correct IN (0,1)),
-  asked_at      TEXT NOT NULL,
-  note          TEXT
+  id          INTEGER PRIMARY KEY,
+  technique   TEXT NOT NULL REFERENCES techniques(name),
+  kind        TEXT NOT NULL CHECK (kind IN ('card','impl','advanced')),
+  problem_uri TEXT,
+  correct     INTEGER NOT NULL CHECK (correct IN (0,1)),
+  asked_at    TEXT NOT NULL,
+  note        TEXT
 );
 
-CREATE INDEX idx_attempts_tk ON attempts(technique_id, kind);
+CREATE INDEX idx_attempts_tk ON attempts(technique, kind);
 
 CREATE VIEW stats AS
-SELECT t.id           AS technique_id,
-       t.name         AS name,
-       t.category     AS category,
+SELECT t.name         AS technique,
+       t.variation_of AS variation_of,
        a.kind         AS kind,
        COUNT(*)       AS n,
        SUM(a.correct) AS ok,
        ROUND(AVG(a.correct) * 100.0, 1) AS acc,
        MAX(a.asked_at) AS last_at
 FROM techniques t
-JOIN attempts a ON a.technique_id = t.id
-GROUP BY t.id, a.kind;
+JOIN attempts a ON a.technique = t.name
+GROUP BY t.name, a.kind;
 """
 
-# (id, name, category)
-TECHNIQUES: list[tuple[str, str, str]] = [
-    # ===== dp =====
-    ("dp-basic-1d",                 "1次元DP",                                  "dp"),
-    ("dp-knapsack",                 "ナップサックDP",                            "dp"),
-    ("dp-lis",                      "LIS（最長増加部分列）",                     "dp"),
-    ("dp-lcs",                      "LCS（最長共通部分列）",                     "dp"),
-    ("dp-edit-distance",            "編集距離",                                  "dp"),
-    ("dp-interval",                 "区間DP",                                    "dp"),
-    ("dp-bit",                      "bitDP",                                     "dp"),
-    ("dp-bit-subset-sum",           "bitDP（部分和）",                           "dp"),
-    ("dp-bit-grouping",             "bitDP（集合分割）",                         "dp"),
-    ("dp-bitmask-tsp",              "bitDP（TSP / 巡回）",                        "dp"),
-    ("dp-tree",                     "木DP",                                      "dp"),
-    ("dp-rerooting",                "全方位木DP",                                "dp"),
-    ("dp-digit",                    "桁DP",                                      "dp"),
-    ("dp-mod",                      "mod DP",                                    "dp"),
-    ("dp-probability",              "確率DP",                                    "dp"),
-    ("dp-expectation",              "期待値DP",                                  "dp"),
-    ("dp-substring-automaton",      "部分文字列DP（subsequence automaton）",     "dp"),
-    ("dp-schedule",                 "スケジューリングDP",                        "dp"),
-    ("dp-grid",                     "グリッドDP",                                "dp"),
-    ("dp-inline-with-segtree",      "セグメント木DP高速化",                      "dp"),
-    ("dp-monotone-queue",           "スライド最小値DP高速化",                    "dp"),
-    ("dp-cht",                      "Convex Hull Trick",                         "dp"),
-    ("dp-divide-conquer-opt",       "分割統治DP高速化",                          "dp"),
-    ("dp-monge",                    "Monge / Knuth 最適化",                       "dp"),
-    ("dp-matrix-power",             "行列累乗DP",                                "dp"),
-    ("dp-sos",                      "Sum over Subsets DP",                       "dp"),
-    ("dp-base-k",                   "k進数DP（三進数等）",                       "dp"),
-    ("dp-recurrence",               "漸化式DP",                                  "dp"),
-    ("dp-inplace-rolling",          "in-place / ローリングDP",                    "dp"),
+# (name, variation_of). Parents listed before children where possible;
+# SQLite FK enforcement is off by default so absolute order is not required.
+TECHNIQUES: list[tuple[str, str | None]] = [
+    # ===== DP =====
+    ("1次元DP",                       None),
+    ("漸化式DP",                      "1次元DP"),
+    ("in-placeローリングDP",          "1次元DP"),
+    ("ナップサックDP",                None),
+    ("LIS",                           None),
+    ("LCS",                           None),
+    ("編集距離",                      "LCS"),
+    ("区間DP",                        None),
+    ("bitDP",                         None),
+    ("部分和bitDP",                   "bitDP"),
+    ("集合分割bitDP",                 "bitDP"),
+    ("TSPbitDP",                      "bitDP"),
+    ("Sum over Subsets DP",           "bitDP"),
+    ("木DP",                          None),
+    ("全方位木DP",                    "木DP"),
+    ("桁DP",                          None),
+    ("k進数DP",                       "桁DP"),
+    ("mod DP",                        None),
+    ("確率DP",                        None),
+    ("期待値DP",                      "確率DP"),
+    ("部分文字列DP",                  None),
+    ("スケジューリングDP",            None),
+    ("グリッドDP",                    None),
+    ("行列累乗DP",                    None),
+    ("セグメント木DP高速化",          None),
+    ("スライド最小値DP高速化",        None),
+    ("Convex Hull Trick",             None),
+    ("分割統治DP高速化",              None),
+    ("Monge最適化",                   None),
 
-    # ===== graph =====
-    ("graph-bfs",                   "BFS",                                       "graph"),
-    ("graph-dfs",                   "DFS",                                       "graph"),
-    ("graph-01-bfs",                "01-BFS",                                    "graph"),
-    ("graph-multi-source-bfs",      "多点スタートBFS",                           "graph"),
-    ("graph-hypergraph-bfs",        "ハイパーグラフBFS",                         "graph"),
-    ("graph-dijkstra",              "ダイクストラ",                              "graph"),
-    ("graph-bellman-ford",          "ベルマン–フォード",                         "graph"),
-    ("graph-warshall-floyd",        "ワーシャル–フロイド",                       "graph"),
-    ("graph-spfa",                  "SPFA / キュー最適化",                        "graph"),
-    ("graph-mst-kruskal",           "最小全域木（Kruskal）",                     "graph"),
-    ("graph-mst-prim",              "最小全域木（Prim）",                        "graph"),
-    ("graph-topological-sort",      "トポロジカルソート",                        "graph"),
-    ("graph-topo-enumerate",        "トポロジカル順序の列挙",                    "graph"),
-    ("graph-reverse-topo",          "逆辺トポロジカルソート",                    "graph"),
-    ("graph-scc",                   "強連結成分分解（SCC）",                     "graph"),
-    ("graph-2sat",                  "2-SAT",                                     "graph"),
-    ("graph-bridge-articulation",   "橋・関節点（lowlink）",                     "graph"),
-    ("graph-bcc",                   "二重連結成分分解",                          "graph"),
-    ("graph-cycle-detect",          "DFSサイクル検出",                           "graph"),
-    ("graph-bipartite-check",       "二部グラフ判定",                            "graph"),
-    ("graph-tree-bipartite-color",  "木の二部塗り分け",                          "graph"),
-    ("graph-tree-diameter",         "木の直径",                                  "graph"),
-    ("graph-lca",                   "LCA（最小共通祖先）",                       "graph"),
-    ("graph-auxiliary-tree",        "仮想木（auxiliary tree）",                  "graph"),
-    ("graph-euler-tour",            "オイラーツアー",                            "graph"),
-    ("graph-hld",                   "Heavy-Light分解",                           "graph"),
-    ("graph-centroid-decomposition","重心分解",                                  "graph"),
-    ("graph-functional",            "ファンクショナルグラフ（なもり）",          "graph"),
-    ("graph-doubling-on-tree",      "ダブリング（木のk個上）",                   "graph"),
-    ("graph-bipartite-matching",    "二部マッチング",                            "graph"),
-    ("graph-max-flow",              "最大流（Dinic等）",                         "graph"),
-    ("graph-min-cut",               "最小カット",                                "graph"),
-    ("graph-min-cost-flow",         "最小費用流",                                "graph"),
-    ("graph-degree-aggregation",    "次数集計・握手補題",                        "graph"),
+    # ===== グラフ探索 =====
+    ("BFS",                           None),
+    ("01-BFS",                        "BFS"),
+    ("多点スタートBFS",               "BFS"),
+    ("ハイパーグラフBFS",             "BFS"),
+    ("DFS",                           None),
+    ("DFSサイクル検出",               "DFS"),
+    ("再帰DFS全列挙",                 "DFS"),
 
-    # ===== string =====
-    ("string-z-algorithm",          "Z-algorithm",                               "string"),
-    ("string-kmp",                  "KMP / failure function",                    "string"),
-    ("string-rolling-hash",         "ローリングハッシュ",                        "string"),
-    ("string-suffix-array",         "Suffix Array",                              "string"),
-    ("string-lcp-array",            "LCP配列",                                   "string"),
-    ("string-aho-corasick",         "Aho-Corasick",                              "string"),
-    ("string-trie",                 "Trie木",                                    "string"),
-    ("string-manacher",             "Manacher（最長回文）",                      "string"),
-    ("string-lex-smallest",         "辞書順最小構成",                            "string"),
-    ("string-run-length",           "ランレングス圧縮",                          "string"),
+    # ===== 最短経路 =====
+    ("ダイクストラ",                  None),
+    ("ベルマン–フォード",             None),
+    ("SPFA",                          "ベルマン–フォード"),
+    ("ワーシャル–フロイド",           None),
 
-    # ===== number-theory =====
-    ("nt-gcd-lcm",                  "GCD / LCM",                                 "number-theory"),
-    ("nt-ext-gcd",                  "拡張ユークリッド互除法",                    "number-theory"),
-    ("nt-mod-pow",                  "繰り返し二乗法（mod冪）",                   "number-theory"),
-    ("nt-mod-inverse",              "modの逆元",                                 "number-theory"),
-    ("nt-prime-sieve",              "エラトステネスの篩",                        "number-theory"),
-    ("nt-linear-sieve",             "線形篩（最小素因数）",                      "number-theory"),
-    ("nt-factorize",                "素因数分解",                                "number-theory"),
-    ("nt-divisor-enumerate",        "約数列挙",                                  "number-theory"),
-    ("nt-miller-rabin",             "Miller–Rabin / Pollard's rho",              "number-theory"),
-    ("nt-crt",                      "中国剰余定理（CRT）",                       "number-theory"),
-    ("nt-euler-phi",                "オイラーのトーシェント関数",                "number-theory"),
-    ("nt-mobius",                   "メビウス関数",                              "number-theory"),
-    ("nt-base-conversion",          "進数変換",                                  "number-theory"),
-    ("nt-digit-sum",                "桁和・桁ごと寄与計算",                      "number-theory"),
+    # ===== 最小全域木 =====
+    ("最小全域木",                    None),
+    ("Kruskal",                       "最小全域木"),
+    ("Prim",                          "最小全域木"),
 
-    # ===== geometry =====
-    ("geom-trigonometry",           "三角関数の基本",                            "geometry"),
-    ("geom-vector-cross-dot",       "ベクトル外積・内積",                        "geometry"),
-    ("geom-ccw",                    "CCW（線分の位置関係）",                     "geometry"),
-    ("geom-segment-intersect",      "線分交差判定",                              "geometry"),
-    ("geom-convex-hull",            "凸包",                                      "geometry"),
-    ("geom-rotation-45",            "45度回転（マンハッタン⇔チェビシェフ）",    "geometry"),
-    ("geom-polar-sort",             "偏角ソート",                                "geometry"),
-    ("geom-closest-pair",           "最近点対",                                  "geometry"),
-    ("geom-float-pitfall",          "浮動小数の罠",                              "geometry"),
+    # ===== トポロジカル =====
+    ("トポロジカルソート",            None),
+    ("トポロジカル順序の列挙",        "トポロジカルソート"),
+    ("逆辺トポロジカルソート",        "トポロジカルソート"),
 
-    # ===== data-structure =====
-    ("ds-stack",                    "スタック",                                  "data-structure"),
-    ("ds-queue",                    "キュー",                                    "data-structure"),
-    ("ds-deque",                    "deque",                                     "data-structure"),
-    ("ds-priority-queue",           "優先度付きキュー",                          "data-structure"),
-    ("ds-set-map",                  "set / map",                                  "data-structure"),
-    ("ds-multiset",                 "multiset / 中央値管理（2-heap）",            "data-structure"),
-    ("ds-union-find",               "Union-Find",                                "data-structure"),
-    ("ds-weighted-union-find",      "重み付きUnion-Find",                        "data-structure"),
-    ("ds-bit",                      "BIT（Fenwick Tree）",                       "data-structure"),
-    ("ds-segtree",                  "セグメント木",                              "data-structure"),
-    ("ds-lazy-segtree",             "遅延伝播セグメント木",                      "data-structure"),
-    ("ds-segtree-on-index",         "平面走査 + BIT / セグ木",                    "data-structure"),
-    ("ds-sqrt-decomposition",       "平方分割",                                  "data-structure"),
-    ("ds-mo",                       "Mo's algorithm",                            "data-structure"),
-    ("ds-sparse-table",             "Sparse Table（RMQ）",                       "data-structure"),
-    ("ds-bitset",                   "bitset高速化",                              "data-structure"),
-    ("ds-imos-1d",                  "いもす法（1次元）",                         "data-structure"),
-    ("ds-imos-2d",                  "二次元いもす法",                            "data-structure"),
-    ("ds-prefix-sum",               "累積和",                                    "data-structure"),
-    ("ds-prefix-sum-2d",            "二次元累積和",                              "data-structure"),
-    ("ds-diff-array",               "階差・差分配列",                            "data-structure"),
-    ("ds-coord-compression",        "座標圧縮",                                  "data-structure"),
+    # ===== 連結成分・低リンク =====
+    ("強連結成分分解",                None),
+    ("2-SAT",                         "強連結成分分解"),
+    ("橋・関節点",                    None),
+    ("二重連結成分分解",              "橋・関節点"),
 
-    # ===== brute-force =====
-    ("bf-loop",                     "多重ループ全探索",                          "brute-force"),
-    ("bf-bit",                      "bit全探索（部分集合列挙）",                 "brute-force"),
-    ("bf-permutation",              "順列全探索",                                "brute-force"),
-    ("bf-subset-of-subset",         "部分集合の部分集合列挙",                    "brute-force"),
-    ("bf-recursive-dfs",            "再帰DFSによる全列挙",                       "brute-force"),
-    ("bf-meet-in-the-middle",       "半分全列挙",                                "brute-force"),
+    # ===== 二部グラフ =====
+    ("二部グラフ判定",                None),
+    ("木の二部塗り分け",              "二部グラフ判定"),
+    ("二部マッチング",                None),
 
-    # ===== search =====
-    ("search-binary-sorted",        "二分探索（ソート済み配列）",                "search"),
-    ("search-binary-on-answer",     "答えで二分探索",                            "search"),
-    ("search-binary-interactive",   "インタラクティブ二分探索",                  "search"),
-    ("search-two-pointers",         "尺取り法",                                  "search"),
-    ("search-ternary",              "三分探索",                                  "search"),
-    ("search-doubling",             "ダブリング",                                "search"),
-    ("search-cyclic-shift",         "循環シフト探索",                            "search"),
+    # ===== ダブリング（先に親） =====
+    ("ダブリング",                    None),
 
-    # ===== construction =====
-    ("con-greedy-sort",             "ソート + 貪欲",                              "construction"),
-    ("con-greedy-exchange",         "交換論法",                                  "construction"),
-    ("con-greedy-simulate",         "貪欲シミュレーション",                      "construction"),
-    ("con-parity",                  "パリティ（偶奇）",                          "construction"),
-    ("con-invariant",               "不変量（XOR和等）",                         "construction"),
-    ("con-pigeonhole",              "鳩の巣原理",                                "construction"),
-    ("con-construction",            "構築（コンストラクティブ）",                "construction"),
-    ("con-meta",                    "メタ的考察",                                "construction"),
-    ("con-bit-independent",         "bitごと独立に計算",                         "construction"),
-    ("con-game-grundy",             "Grundy数 / Nim",                            "construction"),
-    ("con-xor-gauss",               "XOR連立方程式（Gauss消去）",                "construction"),
+    # ===== 木 =====
+    ("木の直径",                      None),
+    ("LCA",                           None),
+    ("仮想木",                        "LCA"),
+    ("オイラーツアー",                None),
+    ("Heavy-Light分解",               None),
+    ("重心分解",                      None),
+    ("ファンクショナルグラフ",        None),
+    ("ダブリング（木のk個上）",       "ダブリング"),
 
-    # ===== math =====
-    ("math-combinatorics",          "組合せ・順列の基本",                        "math"),
-    ("math-mod-combination",        "mod 二項係数（階乗 + 逆元）",                "math"),
-    ("math-inclusion-exclusion",    "包除原理",                                  "math"),
-    ("math-expectation-linearity",  "期待値の線形性",                            "math"),
-    ("math-expectation",            "期待値の計算",                              "math"),
-    ("math-mod-counting",           "mod 数え上げ",                              "math"),
-    ("math-power-counting",         "累乗数え上げ",                              "math"),
-    ("math-simple-counting",        "単純数え上げ・寄与計算",                    "math"),
-    ("math-median",                 "中央値の最適性",                            "math"),
-    ("math-set-dedup",              "集合・重複検出",                            "math"),
-    ("math-fft-ntt",                "FFT / NTT（畳み込み）",                      "math"),
-    ("math-matrix-basic",           "行列演算の基本",                            "math"),
-    ("math-lcm-digits",             "LCM・桁数評価",                             "math"),
+    # ===== フロー =====
+    ("最大流",                        None),
+    ("最小カット",                    "最大流"),
+    ("最小費用流",                    "最大流"),
+
+    # ===== グラフ・その他 =====
+    ("次数集計・握手補題",            None),
+
+    # ===== 文字列 =====
+    ("Z-algorithm",                   None),
+    ("KMP",                           None),
+    ("ローリングハッシュ",            None),
+    ("Suffix Array",                  None),
+    ("LCP配列",                       "Suffix Array"),
+    ("Aho-Corasick",                  None),
+    ("Trie木",                        None),
+    ("Manacher",                      None),
+    ("辞書順最小構成",                None),
+    ("ランレングス圧縮",              None),
+
+    # ===== 整数論 =====
+    ("GCD / LCM",                     None),
+    ("拡張ユークリッド互除法",        "GCD / LCM"),
+    ("中国剰余定理",                  "拡張ユークリッド互除法"),
+    ("繰り返し二乗法",                None),
+    ("modの逆元",                     "繰り返し二乗法"),
+    ("mod二項係数",                   "modの逆元"),
+    ("篩",                            None),
+    ("エラトステネスの篩",            "篩"),
+    ("線形篩",                        "篩"),
+    ("素因数分解",                    None),
+    ("約数列挙",                      None),
+    ("Miller–Rabin / Pollard's rho",  "素因数分解"),
+    ("オイラーのトーシェント関数",    None),
+    ("メビウス関数",                  None),
+    ("進数変換",                      None),
+    ("桁和・桁ごと寄与計算",          None),
+
+    # ===== 幾何 =====
+    ("三角関数の基本",                None),
+    ("ベクトル外積・内積",            None),
+    ("CCW",                           "ベクトル外積・内積"),
+    ("線分交差判定",                  "CCW"),
+    ("凸包",                          None),
+    ("45度回転",                      None),
+    ("偏角ソート",                    None),
+    ("最近点対",                      None),
+    ("浮動小数の罠",                  None),
+
+    # ===== データ構造（線形） =====
+    ("スタック",                      None),
+    ("キュー",                        None),
+    ("deque",                         "キュー"),
+    ("優先度付きキュー",              None),
+    ("中央値管理（2-heap）",          "優先度付きキュー"),
+    ("set / map",                     None),
+    ("multiset",                      "set / map"),
+
+    # ===== データ構造（Union-Find） =====
+    ("Union-Find",                    None),
+    ("重み付きUnion-Find",            "Union-Find"),
+
+    # ===== データ構造（区間） =====
+    ("BIT",                           None),
+    ("セグメント木",                  None),
+    ("遅延セグメント木",              "セグメント木"),
+    ("平面走査 + BIT/セグ木",         None),
+    ("平方分割",                      None),
+    ("Mo's algorithm",                "平方分割"),
+    ("Sparse Table",                  None),
+    ("bitset高速化",                  None),
+
+    # ===== 累積和・差分 =====
+    ("累積和",                        None),
+    ("二次元累積和",                  "累積和"),
+    ("いもす法",                      None),
+    ("二次元いもす法",                "いもす法"),
+    ("階差・差分配列",                None),
+    ("座標圧縮",                      None),
+
+    # ===== 全探索 =====
+    ("多重ループ全探索",              None),
+    ("bit全探索",                     None),
+    ("部分集合の部分集合列挙",        "bit全探索"),
+    ("順列全探索",                    None),
+    ("半分全列挙",                    None),
+
+    # ===== 二分探索・尺取り =====
+    ("二分探索",                      None),
+    ("答えで二分探索",                "二分探索"),
+    ("インタラクティブ二分探索",      "二分探索"),
+    ("三分探索",                      None),
+    ("尺取り法",                      None),
+    ("循環シフト探索",                None),
+
+    # ===== 貪欲・構築 =====
+    ("ソート + 貪欲",                 None),
+    ("交換論法",                      "ソート + 貪欲"),
+    ("貪欲シミュレーション",          None),
+    ("パリティ",                      None),
+    ("不変量",                        None),
+    ("鳩の巣原理",                    None),
+    ("構築",                          None),
+    ("メタ的考察",                    None),
+    ("bitごと独立に計算",             None),
+    ("Grundy数 / Nim",                None),
+    ("XOR連立方程式",                 None),
+
+    # ===== 数え上げ・確率 =====
+    ("組合せ・順列の基本",            None),
+    ("包除原理",                      None),
+    ("期待値の線形性",                None),
+    ("期待値の計算",                  None),
+    ("mod数え上げ",                   None),
+    ("累乗数え上げ",                  None),
+    ("単純数え上げ・寄与計算",        None),
+    ("中央値の最適性",                None),
+    ("集合・重複検出",                None),
+
+    # ===== 数学・その他 =====
+    ("FFT / NTT",                     None),
+    ("行列演算の基本",                None),
+    ("LCM・桁数評価",                 None),
 ]
 
-# Typical90 problem -> representative technique id(s). Reference for Claude
-# when impl is asked: "this technique appears in typical90-NNN, optionally
-# present that problem". Not stored in DB.
+# Typical 90 -> technique names. Reference for Claude when impl picks
+# a real problem to present. Not stored in DB.
 TYPICAL90_MAP: dict[int, list[str]] = {
-    1:  ["search-binary-on-answer"],
-    2:  ["bf-bit"],
-    3:  ["graph-tree-diameter"],
-    4:  ["ds-prefix-sum"],
-    5:  ["dp-matrix-power"],
-    6:  ["string-lex-smallest", "ds-sparse-table"],
-    7:  ["search-binary-sorted"],
-    8:  ["dp-substring-automaton"],
-    9:  ["geom-polar-sort"],
-    10: ["ds-prefix-sum"],
-    11: ["dp-schedule"],
-    12: ["ds-union-find"],
-    13: ["graph-dijkstra"],
-    14: ["con-greedy-sort"],
-    15: ["nt-divisor-enumerate"],
-    16: ["bf-loop"],
-    17: ["ds-segtree-on-index", "ds-bit"],
-    18: ["geom-trigonometry"],
-    19: ["dp-interval"],
-    20: ["geom-float-pitfall"],
-    21: ["graph-scc"],
-    22: ["nt-gcd-lcm"],
-    23: ["dp-bit"],
-    24: ["con-parity"],
-    25: ["con-meta"],
-    26: ["graph-tree-bipartite-color"],
-    27: ["math-set-dedup"],
-    28: ["ds-imos-2d"],
-    29: ["ds-lazy-segtree"],
-    30: ["nt-prime-sieve"],
-    31: ["con-game-grundy"],
-    32: ["bf-permutation"],
-    33: ["math-simple-counting"],
-    34: ["search-two-pointers"],
-    35: ["graph-auxiliary-tree", "graph-lca"],
-    36: ["geom-rotation-45"],
-    37: ["dp-cht"],
-    38: ["math-lcm-digits"],
-    39: ["dp-rerooting"],
-    40: ["graph-min-cut"],
-    41: ["geom-convex-hull"],
-    42: ["dp-mod"],
-    43: ["graph-01-bfs"],
-    44: ["search-cyclic-shift"],
-    45: ["dp-bit-grouping"],
-    46: ["math-mod-counting"],
-    47: ["string-z-algorithm"],
-    48: ["con-greedy-sort"],
-    49: ["ds-sqrt-decomposition"],
-    50: ["dp-recurrence"],
-    51: ["bf-meet-in-the-middle"],
-    52: ["math-expectation"],
-    53: ["search-binary-interactive"],
-    54: ["graph-hypergraph-bfs"],
-    55: ["bf-loop"],
-    56: ["dp-bit-subset-sum"],
-    57: ["con-xor-gauss"],
-    58: ["search-doubling"],
-    59: ["ds-bitset"],
-    60: ["dp-lis"],
-    61: ["ds-deque"],
-    62: ["graph-reverse-topo"],
-    63: ["bf-bit", "math-simple-counting"],
-    64: ["ds-diff-array"],
-    65: ["math-inclusion-exclusion"],
-    66: ["math-expectation-linearity"],
-    67: ["nt-base-conversion"],
-    68: ["ds-weighted-union-find"],
-    69: ["math-power-counting"],
-    70: ["math-median"],
-    71: ["graph-topo-enumerate"],
-    72: ["graph-cycle-detect"],
-    73: ["dp-tree"],
-    74: ["dp-base-k"],
-    75: ["nt-factorize"],
-    76: ["search-two-pointers"],
-    77: ["graph-bipartite-matching"],
-    78: ["graph-degree-aggregation"],
-    79: ["con-greedy-simulate"],
-    80: ["math-inclusion-exclusion", "dp-bit"],
-    81: ["ds-imos-2d"],
-    82: ["nt-digit-sum"],
-    83: ["ds-sqrt-decomposition"],
-    84: ["search-two-pointers"],
-    85: ["nt-divisor-enumerate"],
-    86: ["con-bit-independent"],
-    87: ["search-binary-sorted"],
-    88: ["con-pigeonhole"],
-    89: ["dp-inline-with-segtree"],
-    90: ["math-inclusion-exclusion", "math-mod-counting"],
+    1:  ["答えで二分探索"],
+    2:  ["bit全探索"],
+    3:  ["木の直径"],
+    4:  ["累積和"],
+    5:  ["行列累乗DP"],
+    6:  ["辞書順最小構成", "Sparse Table"],
+    7:  ["二分探索"],
+    8:  ["部分文字列DP"],
+    9:  ["偏角ソート"],
+    10: ["累積和"],
+    11: ["スケジューリングDP"],
+    12: ["Union-Find"],
+    13: ["ダイクストラ"],
+    14: ["ソート + 貪欲"],
+    15: ["約数列挙"],
+    16: ["多重ループ全探索"],
+    17: ["平面走査 + BIT/セグ木", "BIT"],
+    18: ["三角関数の基本"],
+    19: ["区間DP"],
+    20: ["浮動小数の罠"],
+    21: ["強連結成分分解"],
+    22: ["GCD / LCM"],
+    23: ["bitDP"],
+    24: ["パリティ"],
+    25: ["メタ的考察"],
+    26: ["木の二部塗り分け"],
+    27: ["集合・重複検出"],
+    28: ["二次元いもす法"],
+    29: ["遅延セグメント木"],
+    30: ["エラトステネスの篩"],
+    31: ["Grundy数 / Nim"],
+    32: ["順列全探索"],
+    33: ["単純数え上げ・寄与計算"],
+    34: ["尺取り法"],
+    35: ["仮想木", "LCA"],
+    36: ["45度回転"],
+    37: ["Convex Hull Trick"],
+    38: ["LCM・桁数評価"],
+    39: ["全方位木DP"],
+    40: ["最小カット"],
+    41: ["凸包"],
+    42: ["mod DP"],
+    43: ["01-BFS"],
+    44: ["循環シフト探索"],
+    45: ["集合分割bitDP"],
+    46: ["mod数え上げ"],
+    47: ["Z-algorithm"],
+    48: ["ソート + 貪欲"],
+    49: ["平方分割"],
+    50: ["漸化式DP"],
+    51: ["半分全列挙"],
+    52: ["期待値の計算"],
+    53: ["インタラクティブ二分探索"],
+    54: ["ハイパーグラフBFS"],
+    55: ["多重ループ全探索"],
+    56: ["部分和bitDP"],
+    57: ["XOR連立方程式"],
+    58: ["ダブリング"],
+    59: ["bitset高速化"],
+    60: ["LIS"],
+    61: ["deque"],
+    62: ["逆辺トポロジカルソート"],
+    63: ["bit全探索", "単純数え上げ・寄与計算"],
+    64: ["階差・差分配列"],
+    65: ["包除原理"],
+    66: ["期待値の線形性"],
+    67: ["進数変換"],
+    68: ["重み付きUnion-Find"],
+    69: ["累乗数え上げ"],
+    70: ["中央値の最適性"],
+    71: ["トポロジカル順序の列挙"],
+    72: ["DFSサイクル検出"],
+    73: ["木DP"],
+    74: ["k進数DP"],
+    75: ["素因数分解"],
+    76: ["尺取り法"],
+    77: ["二部マッチング"],
+    78: ["次数集計・握手補題"],
+    79: ["貪欲シミュレーション"],
+    80: ["包除原理", "bitDP"],
+    81: ["二次元いもす法"],
+    82: ["桁和・桁ごと寄与計算"],
+    83: ["平方分割"],
+    84: ["尺取り法"],
+    85: ["約数列挙"],
+    86: ["bitごと独立に計算"],
+    87: ["二分探索"],
+    88: ["鳩の巣原理"],
+    89: ["セグメント木DP高速化"],
+    90: ["包除原理", "mod数え上げ"],
 }
 
-assert len({t[0] for t in TECHNIQUES}) == len(TECHNIQUES), "duplicate technique id"
+assert len({n for n, _ in TECHNIQUES}) == len(TECHNIQUES), "duplicate technique name"
 
 
 def main() -> int:
@@ -345,10 +371,16 @@ def main() -> int:
     try:
         conn.executescript(SCHEMA)
         conn.executemany(
-            "INSERT INTO techniques (id, name, category) VALUES (?, ?, ?)",
+            "INSERT INTO techniques (name, variation_of) VALUES (?, ?)",
             TECHNIQUES,
         )
         conn.commit()
+        # verify variation_of references resolve
+        names = {n for n, _ in TECHNIQUES}
+        bad = [(n, v) for n, v in TECHNIQUES if v is not None and v not in names]
+        if bad:
+            print(f"WARNING: dangling variation_of references: {bad}", file=sys.stderr)
+            return 1
     finally:
         conn.close()
 

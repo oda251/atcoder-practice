@@ -32,9 +32,9 @@ def streak(rows: list[tuple[int, str]]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tech", help="restrict to a single technique id")
+    parser.add_argument("--tech", help="restrict to a single technique name")
+    parser.add_argument("--variation-of", help="restrict to children of this parent technique")
     parser.add_argument("--kind", choices=KINDS, help="restrict to a single kind")
-    parser.add_argument("--category", help="restrict to a single category")
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--seed", type=int, help="random seed (testing)")
     args = parser.parse_args()
@@ -53,14 +53,14 @@ def main() -> int:
 
     where, params = [], []
     if args.tech:
-        where.append("id = ?")
+        where.append("name = ?")
         params.append(args.tech)
-    if args.category:
-        where.append("category = ?")
-        params.append(args.category)
+    if args.variation_of:
+        where.append("variation_of = ?")
+        params.append(args.variation_of)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     techniques = conn.execute(
-        f"SELECT id, name, category FROM techniques {where_sql} ORDER BY id",
+        f"SELECT name, variation_of FROM techniques {where_sql} ORDER BY name",
         params,
     ).fetchall()
     if not techniques:
@@ -75,14 +75,13 @@ def main() -> int:
         for kind in kinds:
             rows = conn.execute(
                 "SELECT correct, asked_at FROM attempts "
-                "WHERE technique_id = ? AND kind = ? "
+                "WHERE technique = ? AND kind = ? "
                 "ORDER BY asked_at DESC",
-                (t["id"], kind),
+                (t["name"], kind),
             ).fetchall()
             entry = {
-                "technique_id": t["id"],
-                "name": t["name"],
-                "category": t["category"],
+                "technique": t["name"],
+                "variation_of": t["variation_of"],
                 "kind": kind,
             }
             if not rows:
@@ -111,9 +110,9 @@ def main() -> int:
         return 1
 
     pick = random.choice(bucket)
-    print(f"technique_id: {pick['technique_id']}")
-    print(f"name:         {pick['name']}")
-    print(f"category:     {pick['category']}")
+    print(f"technique:    {pick['technique']}")
+    if pick["variation_of"]:
+        print(f"variation_of: {pick['variation_of']}")
     print(f"kind:         {pick['kind']}")
     print(f"bucket:       {pick['bucket']}")
     if "last_at" in pick:
