@@ -25,7 +25,7 @@ Claude が作った小問題に対して **解答方針** を答える形式。
 - ユーザには **方針だけ** を答えてもらう
 - ユーザ回答後、模範方針と照合し、合致点 / 抜けを指摘
 - 「方針が立てば card は ○」を判定基準とする
-- 結果確定後は下記「記録」を **自動で実行**（実装はしないので `--uri` は付けない）
+- 結果確定後、log スキルでログを取る（uri は付けない）
 
 ### kind = impl
 
@@ -36,7 +36,7 @@ Claude が作った小問題に対して **解答方針** を答える形式。
   - その technique を扱う **典型90 の本問が思い当たれば** 優先的に流用してよい（マッピングは `scripts/init_db.py` の `TYPICAL90_MAP` を参照）
 - 問題文 / 入力形式 / 制約 / サンプル1-2個 を提示
 - ユーザがコードを書いたらレビューし、テストケースで合うか確認
-- 結果確定後は下記「記録」を **自動で実行**（実問題流用時は `--uri` 相当の URL も埋める）
+- 結果確定後、log スキルでログを取る（実問題流用時は uri に URL）
 
 ### kind = advanced
 
@@ -45,25 +45,7 @@ Claude が作った小問題に対して **解答方針** を答える形式。
 - **基本は Claude がその場で発展問題を生成**（同 technique + 追加考察 1 段）
 - AtCoder/yukicoder で **既知の良問が思い当たれば** それを優先（abc/arc の D・E・F が目安）
   - 候補が薄ければ WebFetch で AtCoder Problems や atcoder-tags を確認
-- 結果確定後は下記「記録」を **自動で実行**（実問題なら URL を埋める）
-- 詰まりポイントがあれば note に短く残す
-
-## 記録（自動）
-
-判定が ○/× で確定したら、ユーザに `/log` を促さず、Claude が即 `attempts` に INSERT する。
-
-```bash
-sqlite3 data/practice.db <<'SQL'
-INSERT INTO attempts (technique, kind, problem_uri, correct, asked_at, note)
-VALUES ('<TECH>', '<KIND>', <URI_OR_NULL>, <0|1>, datetime('now'), <NOTE_OR_NULL>);
-SELECT 'recorded #' || last_insert_rowid() || ' ' || datetime('now');
-SQL
-```
-
-- 値はシングルクオートで囲み、シングルクオートのエスケープは `''` 重ね
-- `problem_uri` `note` が無い場合はクオート無しの `NULL`
-- 記録結果（行 ID と時刻）を 1 行報告して終了
-- INSERT 失敗時は原因（未知の technique、kind スペルミス等）を 1 行で伝える
+- 結果確定後、log スキルでログを取る（実問題なら uri に URL、詰まりポイントは note に短く）
 
 ## 共通方針
 
